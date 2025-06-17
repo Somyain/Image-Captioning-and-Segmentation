@@ -25,7 +25,7 @@ class Flickr8kDataset(Dataset):
         image = self.images[img_name]
         if self.transform:
             image = self.transform(image)
-        return torch.tensor(image).permute(2, 0, 1), torch.tensor(caption, dtype=torch.long)
+        return torch.tensor(image, dtype=torch.float32).permute(2, 0, 1), torch.tensor(caption, dtype=torch.long)
 
 def collate_fn(batch):
     images, captions = zip(*batch)
@@ -59,7 +59,7 @@ class COCODataset(Dataset):
         if self.transform:
             image = self.transform(image)
             mask = self.transform(mask)
-        return torch.tensor(image).permute(2, 0, 1), torch.tensor(mask).unsqueeze(0).float()
+        return torch.tensor(image, dtype=torch.float32).permute(2, 0, 1), torch.tensor(mask, dtype=torch.float32).unsqueeze(0)
 
 def get_coco_loader(image_npz, mask_npz, batch_size=32):
     dataset = COCODataset(image_npz, mask_npz)
@@ -76,8 +76,8 @@ if __name__ == "__main__":
         r"E:\ImageProject\datasets\processed\COCO2017\masks.npz"
     )
     for images, captions in flickr_loader:
-        print("Flickr8k batch:", images.shape, captions.shape)
+        print("Flickr8k batch:", images.shape, captions.shape, images.dtype, captions.dtype)
         break
     for images, masks in coco_loader:
-        print("COCO batch:", images.shape, masks.shape)
+        print("COCO batch:", images.shape, masks.shape, images.dtype, masks.dtype)
         break
