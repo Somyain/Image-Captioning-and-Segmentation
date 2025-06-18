@@ -11,7 +11,7 @@ model_dir = r"E:\ImageProject\models"
 os.makedirs(model_dir, exist_ok=True)
 
 # Hyperparameters
-batch_size = 8  # Small batch size for 8GB RAM
+batch_size = 4  # Small batch size for 8GB RAM
 num_epochs = 5
 learning_rate = 0.001
 device = torch.device("cpu")  # Use CPU
