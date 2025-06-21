@@ -95,7 +95,7 @@ def get_coco_loader(image_path, mask_path, batch_size=4, split='train'):
     dataset = COCODataset(image_path, mask_path, split)
     return DataLoader(dataset, batch_size=batch_size, shuffle=(split=='train'))
 
-if __main__ == "__main__":
+if __name__ == "__main__":
     logging.info("Testing data loaders")
     try:
         flickr_loader = get_flickr8k_loader(
