@@ -1,58 +1,71 @@
+import os
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from data_loader import get_flickr8k_loader
-from model import CaptioningModel
-import pickle
-import os
+from torch.utils.data import DataLoader
 
-# Paths
-data_dir = r"E:\ImageProject\datasets\processed\Flickr8k"
-model_dir = r"E:\ImageProject\models"
-os.makedirs(model_dir, exist_ok=True)
+from vocab import Vocabulary
+# Make sure the class name matches the actual class in data_loader_caption.py
+from data_loader_caption import Flickr8kDataset  # Change 'Flickr8kDataset' to the correct class name if needed
+from model.captioning_model import CaptioningModel
 
-# Hyperparameters
-batch_size = 8  # Small batch size for 8GB RAM
-num_epochs = 5
+# === Paths ===
+image_dir = r"datasets\Flickr8k\Images"
+caption_file = r"datasets\Flickr8k\captions.txt"
+model_save_path = "captioning_model_final.pth"
+
+# === Hyperparameters ===
+batch_size = 64
+num_epochs = 10
 learning_rate = 0.001
-device = torch.device("cpu")  # Use CPU
+embed_size = 256
+hidden_size = 512
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load vocabulary
-with open(os.path.join(data_dir, "vocab.pkl"), 'rb') as f:
-    vocab = pickle.load(f)
-vocab_size = len(vocab)
+# === Prepare dataset and vocabulary ===
+print("[🧠] Building vocabulary and loading dataset...")
+vocab = Vocabulary(caption_file, freq_threshold=5)
+dataset = Flickr8kDataset(image_dir, caption_file, vocab)
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=dataset.collate_fn)
 
-# Initialize data loader
-train_loader = get_flickr8k_loader(
-    os.path.join(data_dir, "images.npz"),
-    os.path.join(data_dir, "captions.pkl"),
-    os.path.join(data_dir, "vocab.pkl"),
-    batch_size=batch_size
-)
-
-# Initialize model
-model = CaptioningModel(vocab_size=vocab_size).to(device)
-criterion = nn.CrossEntropyLoss(ignore_index=vocab['<pad>'])  # Ignore padding
+# === Model, Loss, Optimizer ===
+model = CaptioningModel(embed_size, hidden_size, len(vocab)).to(device)
+criterion = nn.CrossEntropyLoss(ignore_index=vocab.pad_idx)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-# Training loop
+# === Training Loop ===
+print(f"[🚀] Starting training on {device}...")
+
 for epoch in range(num_epochs):
     model.train()
-    total_loss = 0
-    for i, (images, captions) in enumerate(train_loader):
-        images, captions = images.to(device), captions.to(device)
+    total_loss = 0.0
+    start_time = time.time()
+    print(f"\n🔁 Epoch {epoch+1}/{num_epochs}")
+
+    for i, (images, captions) in enumerate(dataloader):
+        images = images.to(device)
+        captions = captions.to(device)
+
+        outputs = model(images, captions[:, :-1])
+        loss = criterion(outputs[:, 1:, :].reshape(-1, outputs.size(2)), captions[:, 1:].reshape(-1))
+
         optimizer.zero_grad()
-        outputs = model(images, captions)
-        loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
         loss.backward()
         optimizer.step()
+
         total_loss += loss.item()
-        if (i + 1) % 10 == 0:
-            print(f"Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
-    avg_loss = total_loss / len(train_loader)
-    print(f"Epoch [{epoch+1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
+        print(f"  ⏳ Batch {i+1}/{len(dataloader)} - Loss: {loss.item():.4f}", end="\r")
 
-    # Save checkpoint
-    torch.save(model.state_dict(), os.path.join(model_dir, f"caption_model_epoch_{epoch+1}.pth"))
+    avg_loss = total_loss / len(dataloader)
+    elapsed = time.time() - start_time
+    print(f"\n✅ Epoch {epoch+1} completed - Avg Loss: {avg_loss:.4f} - Time: {elapsed:.1f}s")
 
-print("Captioning model training complete.")
+    # Save model checkpoint
+    checkpoint_path = f"captioning_epoch_{epoch+1}.pth"
+    torch.save(model.state_dict(), checkpoint_path)
+    print(f"💾 Saved checkpoint: {checkpoint_path}")
+
+# === Final Save ===
+torch.save(model.state_dict(), model_save_path)
+print(f"\n🎯 Final model saved to {model_save_path}")
